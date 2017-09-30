@@ -50,25 +50,39 @@ reshapeNN dims xs = NeuralNet (V.fromList mats)
 -- Returns the cost, and a neural net of gradients
 nnCostFunction :: NeuralNet -> Matrix R -> Matrix R -> Double
                -> (Double, NeuralNet)
-nnCostFunction nn xs ys lambda = (jCost, gradients)
+nnCostFunction nn xs ys lambda = (jCost, gradNN)
   where
     m = fromIntegral (rows xs)
-    aN = feedForward xs (matrices nn)
+    mats = matrices nn
+    (activations, linearSums) = feedForward xs mats
+    activationN = head activations
 
-    jMatrix = (-ys * log aN) - ((1-ys) * log (1-aN))
+    jMatrix = (-ys * log activationN) - ((1-ys) * log (1-activationN))
     regVal = let drop1SqSum mat = sumElements ((dropColumns 1 mat) ** 2)
-                 sqSum = V.sum (V.map drop1SqSum (matrices nn))
+                 sqSum = V.sum (V.map drop1SqSum mats)
               in sqSum * lambda / 2
     jCost = (sumElements jMatrix + regVal) / m
 
-    gradients = nn
+    deltaN = activationN - ys
+    -- We start with the Nth delta in our accumulator and work backwards
+    -- We drop the first linearSum because that corresponds to layer N and we are
+    -- working with the previous layer.
+    deltas = reverse $ foldl computeDelta [deltaN] (tail (zip (V.toList mats) linearSums))
+    computeDelta ds@(dNext:_) (theta, lSumPrev) = let dCurrent = dNext <> (dropColumns 1 theta) * sigGrad lSumPrev
+                                                   in dCurrent:ds
 
-feedForward :: Matrix R -> V.Vector (Matrix R) -> Matrix R
-feedForward = V.foldl f
+    rawGrads = reverse $ zipWith (\del act -> (tr del <> (1 ||| act))) deltas (tail activations)
+    -- we only regularize the non-bias terms
+    regularizers = map (\mat -> scalar lambda * (0 ||| dropColumns 1 mat)) (V.toList mats)
+    grads = zipWith (\g r -> (g + r) / scalar m) rawGrads regularizers
+    gradNN = NeuralNet (V.fromList grads)
+
+-- returns the final activation and progressive linear combinations (in reverse order)
+feedForward :: Matrix R -> V.Vector (Matrix R) -> ([Matrix R], [Matrix R])
+feedForward xs mats = V.foldl f ([xs], []) mats
   where
-    f acc mat = sigmoid $ (1 ||| acc) <> tr mat
-
-    -- yExpanded = matrix (concatMap (mkLogicalArray numLabels . round) (toList (unwrap ys))) :: L m numLabels
+    f (as@(aPrev:_), ls) mat = let lCurrent = (1 ||| aPrev) <> tr mat
+                                in ((sigmoid lCurrent):as, lCurrent:ls)
 
 sigmoid x = 1 / (1 + exp(-x))
 sigGrad x = (sigmoid x) * (1 - (sigmoid x))
@@ -85,7 +99,9 @@ randEpsilonMat :: Int -> Int -> Rand (Matrix R)
 randEpsilonMat r c = do
   seed <- randRandom
   let mat = uniformSample seed r (replicate r (0,1))
-      epsilonInit = sqrt 6 / sqrt (fromIntegral (r * c))
+      l_in = r - 1
+      l_out = c
+      epsilonInit = sqrt 6 / sqrt (fromIntegral (l_in * l_out))
   return ((mat * 2 * epsilonInit) - epsilonInit)
 
 runNN :: IO ()
@@ -118,10 +134,18 @@ xor_xnor = do
                     , 1, 0
                     , 0, 1
                     ]
-      lambda = 0
-      (cost, grad) = nnCostFunction nn xs ys lambda
-  print cost
-  putStrLn "9.09215500328088e-05 is expected"
+      ps = [ (0, "9.09215500328088e-05")
+           , (0.5, "2.00000090921550e+02")
+           , (1, "4.00000090921550e+02")
+           ]
+  forM_ ps $ \(lambda, expected) -> do
+    let (cost, grad) = nnCostFunction nn xs ys lambda
+    putStrLn $ replicate 40 '-'
+    putStrLn $ "lambda = " ++ show lambda
+    print cost
+    putStrLn $ expected ++ " is expected"
+    print grad
+    putStrLn $ replicate 40 '-' ++ "\n"
 
 exFeedForward :: IO ()
 exFeedForward = do
