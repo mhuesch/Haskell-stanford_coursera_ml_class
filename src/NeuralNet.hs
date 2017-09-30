@@ -53,18 +53,18 @@ nnCostFunction :: NeuralNet -> Matrix R -> Matrix R -> Double
 nnCostFunction nn xs ys lambda = (jCost, gradients)
   where
     m = fromIntegral (rows xs)
-    aN = forwardProp xs (matrices nn)
+    aN = feedForward xs (matrices nn)
 
     jMatrix = (-ys * log aN) - ((1-ys) * log (1-aN))
-    regVals = let drop1SqSum mat = sumElements ((dropColumns 1 mat) ** 2)
-                  sqSum = V.sum (V.map drop1SqSum (matrices nn))
-               in sqSum * lambda / (2*m)
-    jCost = (sumElements jMatrix + regVals) / m
+    regVal = let drop1SqSum mat = sumElements ((dropColumns 1 mat) ** 2)
+                 sqSum = V.sum (V.map drop1SqSum (matrices nn))
+              in sqSum * lambda / 2
+    jCost = (sumElements jMatrix + regVal) / m
 
     gradients = nn
 
-forwardProp :: Matrix R -> V.Vector (Matrix R) -> Matrix R
-forwardProp = V.foldl f
+feedForward :: Matrix R -> V.Vector (Matrix R) -> Matrix R
+feedForward = V.foldl f
   where
     f acc mat = sigmoid $ (1 ||| acc) <> tr mat
 
@@ -122,6 +122,28 @@ xor_xnor = do
       (cost, grad) = nnCostFunction nn xs ys lambda
   print cost
   putStrLn "9.09215500328088e-05 is expected"
+
+exFeedForward :: IO ()
+exFeedForward = do
+  xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
+  ys <- matrix 1 . map read . words <$> readFile "data/y.txt"
+  theta1 <- matrix 401 . map read . words <$> readFile "data/Theta1.txt"
+  theta2 <- matrix 26 . map read . words <$> readFile "data/Theta2.txt"
+  -- print $ map size [theta1,theta2,ys,xs]
+  -- print (map maxElement (toColumns xs))
+  -- print (map maxElement (toColumns theta1))
+  -- print (map maxElement (toColumns theta2))
+  let nn = NeuralNet (V.fromList [theta1, theta2])
+      ysExpanded = matrix 10 (concatMap (mkLogicalArray 10 . round) (concat (toLists ys)))
+  print (fst (nnCostFunction nn xs ysExpanded 0))
+  putStrLn "0.287629 is expected"
+  print (fst (nnCostFunction nn xs ysExpanded 1))
+  putStrLn "0.383770 is expected"
+
+mkLogicalArray :: Num a => Int -> Int -> [a]
+mkLogicalArray len pos = take len (replicate frontLen 0 ++ [1] ++ repeat 0)
+  where
+    frontLen = pos - 1
 
 --------------------------------------------------------------------------------
 -- Instances
