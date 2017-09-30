@@ -4,8 +4,11 @@ module NeuralNet where
 import           Control.Monad
 import qualified Data.Vector as V
 import           Numeric.LinearAlgebra
+import           System.Random
 import           Test.QuickCheck.Arbitrary (arbitrary)
 import           Test.QuickCheck.Gen
+
+import RandomMonad
 
 data NeuralNet = NeuralNet
   { matrices :: V.Vector (Matrix Double)
@@ -49,11 +52,14 @@ nnCostFunction :: NeuralNet -> Matrix R -> Matrix R -> Double
                -> (Double, NeuralNet)
 nnCostFunction nn xs ys lambda = (jCost, gradients)
   where
-    m = rows xs
+    m = fromIntegral (rows xs)
     aN = forwardProp xs (matrices nn)
 
     jMatrix = (-ys * log aN) - ((1-ys) * log (1-aN))
-    jCost = sumElements jMatrix / (fromIntegral m)
+    regVals = let drop1SqSum mat = sumElements ((dropColumns 1 mat) ** 2)
+                  sqSum = V.sum (V.map drop1SqSum (matrices nn))
+               in sqSum * lambda / (2*m)
+    jCost = (sumElements jMatrix + regVals) / m
 
     gradients = nn
 
@@ -66,6 +72,28 @@ forwardProp = V.foldl f
 
 sigmoid x = 1 / (1 + exp(-x))
 sigGrad x = (sigmoid x) * (1 - (sigmoid x))
+
+
+
+randInitialNN :: (Int, [Int], Int) -> Rand NeuralNet
+randInitialNN dims = do
+  let matDims = nnDimsToMatDims dims
+  mats <- mapM (uncurry randEpsilonMat) matDims
+  return (NeuralNet (V.fromList mats))
+
+randEpsilonMat :: Int -> Int -> Rand (Matrix R)
+randEpsilonMat r c = do
+  seed <- randRandom
+  let mat = uniformSample seed r (replicate r (0,1))
+      epsilonInit = sqrt 6 / sqrt (fromIntegral (r * c))
+  return ((mat * 2 * epsilonInit) - epsilonInit)
+
+runNN :: IO ()
+runNN = do
+  g <- getStdGen
+  let dims = (4,[3],2)
+      nn = evalRand g (randInitialNN dims)
+  print nn
 
 exNN :: NeuralNet
 exNN = reshapeNN (4,[3],2) (vector (replicate 23 1))
