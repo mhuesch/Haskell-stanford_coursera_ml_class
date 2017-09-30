@@ -16,6 +16,7 @@ library
   build-depends:       base >= 4.7 && < 5
                      , vector
                      , hmatrix
+                     , QuickCheck
   default-language:    Haskell2010
 
 executable neural-net
@@ -25,12 +26,14 @@ executable neural-net
   default-language:    Haskell2010
 
 test-suite unit-tests
-  type:          exitcode-stdio-1.0
-  main-is:       Spec.hs
-  hs-source-dirs: test/unit
-  build-depends: base
-               , ML-class-haskell
-               , hspec
-               , hspec-discover
-               , QuickCheck
+  type:                exitcode-stdio-1.0
+  main-is:             Spec.hs
+  hs-source-dirs:      test/unit
+  build-depends:       base
+                     , ML-class-haskell
+                     , hmatrix
+                     , vector
+                     , hspec
+                     , hspec-discover
+                     , QuickCheck
   default-language:    Haskell2010
