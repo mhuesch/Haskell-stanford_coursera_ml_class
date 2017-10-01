@@ -3,6 +3,7 @@ module NeuralNet where
 
 import           Control.Monad
 import qualified Data.Vector as V
+import           Numeric.GSL.Minimization
 import           Numeric.LinearAlgebra
 import           System.Random
 import           Test.QuickCheck.Arbitrary (arbitrary)
@@ -13,6 +14,17 @@ import RandomMonad
 data NeuralNet = NeuralNet
   { matrices :: V.Vector (Matrix Double)
   } deriving (Eq, Show)
+
+trainNN :: Int -> R
+        -> NeuralNet -> Matrix R -> Matrix R -> NeuralNet
+trainNN maxIter lambda nn xs ys = reshapeNN dims solVec
+  where
+    dims = nnSize nn
+    wrappedCF inVec = let (cost, grad) = nnCostFunction (reshapeNN dims inVec) xs ys lambda
+                       in (cost, flattenNN grad)
+    f = fst . wrappedCF
+    df = snd . wrappedCF
+    (solVec, optPath) = minimizeVD ConjugatePR 1E-3 maxIter 1E-2 1E-4 f df (flattenNN nn)
 
 matDimsToNNDims :: [(Int,Int)] -> (Int,[Int],Int)
 matDimsToNNDims ds = (inputCount, hiddenCounts, outputCount)
@@ -77,6 +89,9 @@ nnCostFunction nn xs ys lambda = (jCost, gradNN)
     grads = zipWith (\g r -> (g + r) / scalar m) rawGrads regularizers
     gradNN = NeuralNet (V.fromList grads)
 
+feedForwardNN :: NeuralNet -> Matrix R -> Matrix R
+feedForwardNN nn xs = head (fst (feedForward xs (matrices nn)))
+
 -- returns the final activation and progressive linear combinations (in reverse order)
 feedForward :: Matrix R -> V.Vector (Matrix R) -> ([Matrix R], [Matrix R])
 feedForward xs mats = V.foldl f ([xs], []) mats
@@ -98,7 +113,7 @@ randInitialNN dims = do
 randEpsilonMat :: Int -> Int -> Rand (Matrix R)
 randEpsilonMat r c = do
   seed <- randRandom
-  let mat = uniformSample seed r (replicate r (0,1))
+  let mat = uniformSample seed r (replicate c (0,1))
       l_in = r - 1
       l_out = c
       epsilonInit = sqrt 6 / sqrt (fromIntegral (l_in * l_out))
@@ -163,6 +178,26 @@ exFeedForward = do
   putStrLn "0.287629 is expected"
   print (fst (nnCostFunction nn xs ysExpanded 1))
   putStrLn "0.383770 is expected"
+
+exTrain :: IO ()
+exTrain = do
+  xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
+  ys <- matrix 1 . map read . words <$> readFile "data/y.txt"
+  g <- getStdGen
+  let dims = (400, [25], 10)
+      initNN = evalRand g (randInitialNN dims)
+      initCost = fst (nnCostFunction initNN xs ysExpanded lambda)
+      lambda = 1
+      ysExpanded = matrix 10 (concatMap (mkLogicalArray 10 . round) (concat (toLists ys)))
+      f (count, costPairs, nn) iter =
+        let nn' = trainNN iter lambda nn xs ysExpanded
+            count' = count+iter
+            cost = fst (nnCostFunction nn' xs ysExpanded lambda)
+            pair = (count', cost)
+         in (count', costPairs ++ [pair], nn')
+      (_, costPairs, finalNN) = foldl f (0, [(0,initCost)], initNN) (replicate 70 50)
+  forM_ costPairs $ \(iters,cost) ->
+    putStrLn $ "iterations: " ++ show iters ++ ", cost: " ++ show cost
 
 mkLogicalArray :: Num a => Int -> Int -> [a]
 mkLogicalArray len pos = take len (replicate frontLen 0 ++ [1] ++ repeat 0)

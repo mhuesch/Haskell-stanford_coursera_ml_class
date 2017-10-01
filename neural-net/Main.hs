@@ -1,3 +1,5 @@
 module Main where
 
-main = putStrLn "hi"
+import NeuralNet
+
+main = exTrain

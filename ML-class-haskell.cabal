@@ -13,9 +13,11 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     NeuralNet
+                     , RandomMonad
   build-depends:       base >= 4.7 && < 5
                      , vector
                      , hmatrix
+                     , hmatrix-gsl
                      , QuickCheck
                      , random
                      , mtl
@@ -25,12 +27,14 @@ executable neural-net
   hs-source-dirs:      neural-net
   main-is:             Main.hs
   build-depends:       base >=4.9 && <4.10
+                     , ML-class-haskell
   default-language:    Haskell2010
 
 test-suite unit-tests
   type:                exitcode-stdio-1.0
   main-is:             Spec.hs
   hs-source-dirs:      test/unit
+  other-modules:       NeuralNetSpec
   build-depends:       base
                      , ML-class-haskell
                      , hmatrix
