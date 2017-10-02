@@ -5,6 +5,13 @@ import           System.Random
 
 type Rand a = S.State StdGen a
 
+randIO :: Rand a -> IO a
+randIO m = do
+  g <- getStdGen
+  let (x, g') = runRand g m
+  setStdGen g'
+  return x
+
 runRand :: StdGen -> Rand a -> (a, StdGen)
 runRand g m = S.runState m g
 

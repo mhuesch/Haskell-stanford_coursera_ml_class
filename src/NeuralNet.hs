@@ -1,5 +1,19 @@
 {-# LANGUAGE FlexibleContexts #-}
-module NeuralNet where
+module NeuralNet (
+    NeuralNet(),
+    mkNeuralNet,
+    trainNN,
+    nnSize,
+    nnCostFunction,
+    feedForwardNN,
+    randInitialNN,
+    expandLogicalArray,
+    flattenNN,
+    reshapeNN,
+
+    matrix,
+    vector
+  ) where
 
 import           Control.Monad
 import qualified Data.Vector as V
@@ -14,6 +28,9 @@ import RandomMonad
 data NeuralNet = NeuralNet
   { matrices :: V.Vector (Matrix Double)
   } deriving (Eq, Show)
+
+mkNeuralNet :: [Matrix R] -> NeuralNet
+mkNeuralNet = NeuralNet . V.fromList
 
 trainNN :: Int -> R
         -> NeuralNet -> Matrix R -> Matrix R -> NeuralNet
@@ -119,93 +136,16 @@ randEpsilonMat r c = do
       epsilonInit = sqrt 6 / sqrt (fromIntegral (l_in * l_out))
   return ((mat * 2 * epsilonInit) - epsilonInit)
 
-runNN :: IO ()
-runNN = do
-  g <- getStdGen
-  let dims = (4,[3],2)
-      nn = evalRand g (randInitialNN dims)
-  print nn
-
-exNN :: NeuralNet
-exNN = reshapeNN (4,[3],2) (vector (replicate 23 1))
-
-xor_xnor :: IO ()
-xor_xnor = do
-  let theta1 = matrix 3 [ -30, 20, 20 -- AND
-                        , -10, 20, 20 -- OR
-                        ]
-      theta2 = matrix 3 [ -10, -20,  20 -- XOR
-                        ,  10,  20, -20 -- XNOR
-                        ]
-      nn = NeuralNet (V.fromList [theta1, theta2])
-      xs = matrix 2 [ 1, 1
-                    , 0, 1
-                    , 1, 0
-                    , 0, 0
-                    ]
-      -- the numbers represent the index of the "correct" output node
-      ys = matrix 2 [ 0, 1
-                    , 1, 0
-                    , 1, 0
-                    , 0, 1
-                    ]
-      ps = [ (0, "9.09215500328088e-05")
-           , (0.5, "2.00000090921550e+02")
-           , (1, "4.00000090921550e+02")
-           ]
-  forM_ ps $ \(lambda, expected) -> do
-    let (cost, grad) = nnCostFunction nn xs ys lambda
-    putStrLn $ replicate 40 '-'
-    putStrLn $ "lambda = " ++ show lambda
-    print cost
-    putStrLn $ expected ++ " is expected"
-    print grad
-    putStrLn $ replicate 40 '-' ++ "\n"
-
-exFeedForward :: IO ()
-exFeedForward = do
-  xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
-  ys <- matrix 1 . map read . words <$> readFile "data/y.txt"
-  theta1 <- matrix 401 . map read . words <$> readFile "data/Theta1.txt"
-  theta2 <- matrix 26 . map read . words <$> readFile "data/Theta2.txt"
-  -- print $ map size [theta1,theta2,ys,xs]
-  -- print (map maxElement (toColumns xs))
-  -- print (map maxElement (toColumns theta1))
-  -- print (map maxElement (toColumns theta2))
-  let nn = NeuralNet (V.fromList [theta1, theta2])
-      ysExpanded = matrix 10 (concatMap (mkLogicalArray 10 . round) (concat (toLists ys)))
-  print (fst (nnCostFunction nn xs ysExpanded 0))
-  putStrLn "0.287629 is expected"
-  print (fst (nnCostFunction nn xs ysExpanded 1))
-  putStrLn "0.383770 is expected"
-
-exTrain :: IO ()
-exTrain = do
-  xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
-  ys <- matrix 1 . map read . words <$> readFile "data/y.txt"
-  g <- getStdGen
-  let dims = (400, [25], 10)
-      initNN = evalRand g (randInitialNN dims)
-      initCost = fst (nnCostFunction initNN xs ysExpanded lambda)
-      lambda = 1
-      ysExpanded = matrix 10 (concatMap (mkLogicalArray 10 . round) (concat (toLists ys)))
-      f (count, costPairs, nn) iter =
-        let nn' = trainNN iter lambda nn xs ysExpanded
-            count' = count+iter
-            cost = fst (nnCostFunction nn' xs ysExpanded lambda)
-            pair = (count', cost)
-         in (count', costPairs ++ [pair], nn')
-      (_, costPairs, finalNN) = foldl f (0, [(0,initCost)], initNN) (replicate 70 50)
-  forM_ costPairs $ \(iters,cost) ->
-    putStrLn $ "iterations: " ++ show iters ++ ", cost: " ++ show cost
-
 mkLogicalArray :: Num a => Int -> Int -> [a]
 mkLogicalArray len pos = take len (replicate frontLen 0 ++ [1] ++ repeat 0)
   where
     frontLen = pos - 1
 
+expandLogicalArray :: Int -> [Int] -> Matrix R
+expandLogicalArray len is = matrix len (concatMap (mkLogicalArray len) is)
+
 --------------------------------------------------------------------------------
--- Instances
+-- QuickCheck Gen Instances
 --------------------------------------------------------------------------------
 positiveInt :: Gen Int
 positiveInt = suchThat arbitrary (> 0)
@@ -227,6 +167,9 @@ matrixGen r c = do
   xs <- replicateM (r*c) arbitrary
   return (matrix c xs)
 
+--------------------------------------------------------------------------------
+-- Misc helpers
+--------------------------------------------------------------------------------
 -- Lifted from https://hackage.haskell.org/package/checkers-0.4.7/docs/src/Test-QuickCheck-Instances-Tuple.html#%3E%2A%3C
 {- | Generates a 2-tuple using its arguments to generate the parts.
 -}
