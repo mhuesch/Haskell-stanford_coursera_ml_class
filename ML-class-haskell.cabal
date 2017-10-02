@@ -28,6 +28,7 @@ executable neural-net
   main-is:             Main.hs
   build-depends:       base >=4.9 && <4.10
                      , ML-class-haskell
+                     , directory
   default-language:    Haskell2010
 
 test-suite unit-tests

@@ -3,6 +3,8 @@ module Main where
 import Control.Monad
 import NeuralNet
 import RandomMonad
+import System.Directory
+import System.Exit
 
 main = exTrain
 
@@ -54,6 +56,7 @@ xor_xnor = do
 
 exFeedForward :: IO ()
 exFeedForward = do
+  dataDirCheck
   xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
   ys <- map read . words <$> readFile "data/y.txt"
   theta1 <- matrix 401 . map read . words <$> readFile "data/Theta1.txt"
@@ -72,6 +75,7 @@ exFeedForward = do
 
 exTrain :: IO ()
 exTrain = do
+  dataDirCheck
   xs <- matrix 400 . map read . words <$> readFile "data/X.txt"
   ys <- map read . words <$> readFile "data/y.txt"
   let dims = (400, [25], 10)
@@ -89,3 +93,10 @@ exTrain = do
       (_, costPairs, finalNN) = foldl f (0, [(0,initCost)], initNN) (replicate 70 50)
   forM_ costPairs $ \(iters,cost) ->
     putStrLn $ "iterations: " ++ show iters ++ ", cost: " ++ show cost
+
+dataDirCheck :: IO ()
+dataDirCheck = do
+  yes <- doesDirectoryExist "data"
+  unless yes $ do
+    putStrLn "data directory not present. Please follow instructions in README.md"
+    exitFailure
